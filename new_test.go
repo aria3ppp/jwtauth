@@ -51,12 +51,11 @@ func TestNew(t *testing.T) {
 	}
 
 	require.PanicsWithValue("at least one key must provided", func() {
-		_ = NewWithClock[CustomClaims](TimeClock{}, 0)
+		_ = New[CustomClaims](0)
 	})
 
 	require.PanicsWithValue("kid \"kid\" set by another key", func() {
-		_ = NewWithClock[CustomClaims](
-			TimeClock{},
+		_ = New[CustomClaims](
 			0,
 			NewHMACKey("kid", []byte{}, jwt.SigningMethodHS256),
 			NewHMACKey("kid", []byte{}, jwt.SigningMethodHS256),
@@ -86,7 +85,7 @@ func TestNew(t *testing.T) {
 		).Deprecated(),
 	}
 
-	auth := NewWithClock[CustomClaims](TimeClock{}, 15*60, keys...)
+	auth := New[CustomClaims](15*60, keys...)
 
 	require.Equal(
 		map[string]*Key{
