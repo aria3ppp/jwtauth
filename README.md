@@ -1,5 +1,6 @@
 # jwtauth
 `jwtauth` handle multiple keys for jwt token signing and verification.
+
 [![Tests](https://github.com/aria3ppp/jwtauth/actions/workflows/tests.yml/badge.svg)](https://github.com/aria3ppp/jwtauth/actions/workflows/tests.yml)
 [![Coverage Status](https://coveralls.io/repos/github/aria3ppp/jwtauth/badge.svg?branch=master)](https://coveralls.io/github/aria3ppp/jwtauth?branch=master)
 
@@ -38,21 +39,21 @@ auth := jwtauth.New[CustomClaims](
         jwt.SigningMethodES,
     ),
     jwtauth.NewECDSAKey(
-		"kid#2",
-		ecdsaPrivateKey,
-		jwt.SigningMethodES256,
-	),
+	"kid#2",
+	ecdsaPrivateKey,
+	jwt.SigningMethodES256,
+    ),
     // keys marked as deprecated
-	jwtauth.NewHMACKey(
-		"kid#3",
-		[]byte("another_secret"),
-		jwt.SigningMethodHS256,
-	).Deprecated(),
-	jwtauth.NewRSAKey(
-		"kid#4",
-		rsaPrivateKey,
-		jwt.SigningMethodRS256,
-	).Deprecated(),
+    jwtauth.NewHMACKey(
+	"kid#3",
+	[]byte("another_secret"),
+	jwt.SigningMethodHS256,
+    ).Deprecated(),
+    jwtauth.NewRSAKey(
+	"kid#4",
+	rsaPrivateKey,
+	jwt.SigningMethodRS256,
+    ).Deprecated(),
 )
 
 // Generate token
