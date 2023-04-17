@@ -90,34 +90,6 @@ func TestGenerateToken(t *testing.T) {
 		want   want
 	}{
 		{
-			name: "invalid key",
-			fields: fields{
-				expireSeconds: 15 * 60,
-				keys: []*jwtauth.Key{
-					jwtauth.NewECDSAKey(
-						"kid#2",
-						// Copy the key so the modifications is not reflected
-						// to other test cases that use the same key
-						func(key ecdsa.PrivateKey) *ecdsa.PrivateKey {
-							// modify elliptic curve to a value that do not match the singing method
-							key.PublicKey.Curve = elliptic.P384()
-							return &key
-						}(*ecdsaPrivateKey),
-						jwt.SigningMethodES256,
-					),
-				},
-			},
-			args: args{
-				customClaims: &CustomClaims{
-					UserID:  "999",
-					IsAdmin: true,
-				},
-			},
-			want: want{
-				err: jwt.ErrInvalidKey,
-			},
-		},
-		{
 			name: "ok",
 			fields: fields{
 				expireSeconds: 15 * 60,
@@ -137,72 +109,6 @@ func TestGenerateToken(t *testing.T) {
 						[]byte("another_secret"),
 						jwt.SigningMethodHS256,
 					),
-					jwtauth.NewRSAKey(
-						"kid#4",
-						rsaPrivateKey,
-						jwt.SigningMethodRS256,
-					),
-				},
-			},
-			args: args{
-				customClaims: &CustomClaims{
-					UserID:  "999",
-					IsAdmin: true,
-				},
-			},
-			want: want{
-				err: nil,
-			},
-		},
-		{
-			name: "ok hmac key",
-			fields: fields{
-				expireSeconds: 15 * 60,
-				keys: []*jwtauth.Key{
-					jwtauth.NewHMACKey(
-						"kid#1",
-						[]byte("secret"),
-						jwt.SigningMethodHS256,
-					),
-				},
-			},
-			args: args{
-				customClaims: &CustomClaims{
-					UserID:  "999",
-					IsAdmin: true,
-				},
-			},
-			want: want{
-				err: nil,
-			},
-		},
-		{
-			name: "ok ecdsa key",
-			fields: fields{
-				expireSeconds: 15 * 60,
-				keys: []*jwtauth.Key{
-					jwtauth.NewECDSAKey(
-						"kid#1",
-						ecdsaPrivateKey,
-						jwt.SigningMethodES256,
-					),
-				},
-			},
-			args: args{
-				customClaims: &CustomClaims{
-					UserID:  "999",
-					IsAdmin: true,
-				},
-			},
-			want: want{
-				err: nil,
-			},
-		},
-		{
-			name: "ok rsa key",
-			fields: fields{
-				expireSeconds: 15 * 60,
-				keys: []*jwtauth.Key{
 					jwtauth.NewRSAKey(
 						"kid#4",
 						rsaPrivateKey,
@@ -256,6 +162,254 @@ func TestGenerateToken(t *testing.T) {
 						kid, isString := kidValue.(string)
 						require.True(isString)
 						key = keyByKid(kid, tt.fields.keys)
+						return key.VerifyingKey, nil
+					},
+				)
+				require.NoError(err)
+
+				claims, ok := jwtToken.Claims.(jwt.MapClaims)
+				require.True(ok)
+
+				claimsExpiresAtFloat64, ok := claims["exp"].(float64)
+				require.True(ok)
+				require.Equal(expExpiresAt.Unix(), int64(claimsExpiresAtFloat64))
+
+				customClaims, ok := claims["custom_claims"].(map[string]any)
+				require.True(ok)
+
+				userID, ok := customClaims["user_id"].(string)
+				require.True(ok)
+				require.Equal(tt.args.customClaims.UserID, userID)
+
+				isAdmin, ok := customClaims["is_admin"].(bool)
+				require.True(ok)
+				require.Equal(tt.args.customClaims.IsAdmin, isAdmin)
+			}
+		})
+	}
+}
+
+func TestGenerateTokenWithKid(t *testing.T) {
+	type CustomClaims struct {
+		UserID  string `json:"user_id"`
+		IsAdmin bool   `json:"is_admin"`
+	}
+
+	type fields struct {
+		expireSeconds int
+		keys          []*jwtauth.Key
+	}
+	type args struct {
+		kid          string
+		customClaims *CustomClaims
+	}
+	type want struct {
+		err error
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   want
+	}{
+		{
+			name: "invalid kid",
+			fields: fields{
+				expireSeconds: 15 * 60,
+				keys: []*jwtauth.Key{
+					jwtauth.NewHMACKey(
+						"",
+						[]byte("secret"),
+						jwt.SigningMethodHS256,
+					),
+				},
+			},
+			args: args{
+				kid:          "non-existent-kid",
+				customClaims: &CustomClaims{},
+			},
+			want: want{
+				err: jwtauth.ErrInvalidKid,
+			},
+		},
+		{
+			name: "invalid key",
+			fields: fields{
+				expireSeconds: 15 * 60,
+				keys: []*jwtauth.Key{
+					jwtauth.NewECDSAKey(
+						"kid#2",
+						// Copy the key so the modifications is not reflected
+						// to other test cases that use the same key
+						func(key ecdsa.PrivateKey) *ecdsa.PrivateKey {
+							// modify elliptic curve to a value that do not match the singing method
+							key.PublicKey.Curve = elliptic.P384()
+							return &key
+						}(*ecdsaPrivateKey),
+						jwt.SigningMethodES256,
+					),
+				},
+			},
+			args: args{
+				kid: "kid#2",
+				customClaims: &CustomClaims{
+					UserID:  "999",
+					IsAdmin: true,
+				},
+			},
+			want: want{
+				err: jwt.ErrInvalidKey,
+			},
+		},
+		{
+			name: "ok hmac key",
+			fields: fields{
+				expireSeconds: 15 * 60,
+				keys: []*jwtauth.Key{
+					jwtauth.NewHMACKey(
+						"kid#1",
+						[]byte("secret"),
+						jwt.SigningMethodHS256,
+					),
+					jwtauth.NewECDSAKey(
+						"kid#2",
+						ecdsaPrivateKey,
+						jwt.SigningMethodES256,
+					),
+					jwtauth.NewHMACKey(
+						"kid#3",
+						[]byte("another_secret"),
+						jwt.SigningMethodHS256,
+					),
+					jwtauth.NewRSAKey(
+						"kid#4",
+						rsaPrivateKey,
+						jwt.SigningMethodRS256,
+					),
+				},
+			},
+			args: args{
+				kid: "kid#1",
+				customClaims: &CustomClaims{
+					UserID:  "999",
+					IsAdmin: true,
+				},
+			},
+			want: want{
+				err: nil,
+			},
+		},
+		{
+			name: "ok ecdsa key",
+			fields: fields{
+				expireSeconds: 15 * 60,
+				keys: []*jwtauth.Key{
+					jwtauth.NewHMACKey(
+						"kid#1",
+						[]byte("secret"),
+						jwt.SigningMethodHS256,
+					),
+					jwtauth.NewECDSAKey(
+						"kid#2",
+						ecdsaPrivateKey,
+						jwt.SigningMethodES256,
+					),
+					jwtauth.NewHMACKey(
+						"kid#3",
+						[]byte("another_secret"),
+						jwt.SigningMethodHS256,
+					),
+					jwtauth.NewRSAKey(
+						"kid#4",
+						rsaPrivateKey,
+						jwt.SigningMethodRS256,
+					),
+				},
+			},
+			args: args{
+				kid: "kid#2",
+				customClaims: &CustomClaims{
+					UserID:  "999",
+					IsAdmin: true,
+				},
+			},
+			want: want{
+				err: nil,
+			},
+		},
+		{
+			name: "ok rsa key",
+			fields: fields{
+				expireSeconds: 15 * 60,
+				keys: []*jwtauth.Key{
+					jwtauth.NewHMACKey(
+						"kid#1",
+						[]byte("secret"),
+						jwt.SigningMethodHS256,
+					),
+					jwtauth.NewECDSAKey(
+						"kid#2",
+						ecdsaPrivateKey,
+						jwt.SigningMethodES256,
+					),
+					jwtauth.NewHMACKey(
+						"kid#3",
+						[]byte("another_secret"),
+						jwt.SigningMethodHS256,
+					),
+					jwtauth.NewRSAKey(
+						"kid#4",
+						rsaPrivateKey,
+						jwt.SigningMethodRS256,
+					),
+				},
+			},
+			args: args{
+				kid: "kid#4",
+				customClaims: &CustomClaims{
+					UserID:  "999",
+					IsAdmin: true,
+				},
+			},
+			want: want{
+				err: nil,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+
+			timeNow := time.Now()
+
+			auth := jwtauth.NewWithClock[CustomClaims](
+				MockClock{timeNow},
+				tt.fields.expireSeconds,
+				tt.fields.keys...,
+			)
+
+			token, expiresAt, err := auth.GenerateTokenWithKid(
+				tt.args.kid,
+				tt.args.customClaims,
+			)
+
+			require.Equal(tt.want.err, err)
+
+			if tt.want.err != nil {
+				require.Equal("", token)
+				require.Equal(time.Time{}, expiresAt)
+			} else {
+				expExpiresAt := timeNow.Add(time.Second * time.Duration(tt.fields.expireSeconds))
+				require.Equal(expExpiresAt, expiresAt)
+
+				var key *jwtauth.Key
+
+				jwtToken, err := jwt.Parse(
+					token,
+					func(t *jwt.Token) (any, error) {
+						key = keyByKid(tt.args.kid, tt.fields.keys)
 						return key.VerifyingKey, nil
 					},
 				)

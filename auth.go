@@ -9,10 +9,10 @@ import (
 )
 
 type Auth[CustomClaims any] struct {
-	keyStore      map[string]*Key
-	signingKids   []string
-	expireSeconds int   // token expires in seconds
-	clock         Clock // clock used to get current time by invoking `Now` method
+	keyStore                  map[string]*Key
+	signingKids               []string
+	expirationDurationSeconds int   // token expiration duration in seconds
+	clock                     Clock // clock used to get current time by invoking `Now` method
 }
 
 func New[CustomClaims any](
@@ -47,10 +47,10 @@ func NewWithClock[CustomClaims any](
 	}
 
 	return &Auth[CustomClaims]{
-		keyStore:      keyStore,
-		signingKids:   signingKids,
-		expireSeconds: expireSeconds,
-		clock:         clock,
+		keyStore:                  keyStore,
+		signingKids:               signingKids,
+		expirationDurationSeconds: expireSeconds,
+		clock:                     clock,
 	}
 }
 
@@ -62,10 +62,31 @@ type jwtClaims[CustomClaims any] struct {
 func (auth *Auth[CustomClaims]) GenerateToken(
 	customClaims *CustomClaims,
 ) (token string, expiresAt time.Time, err error) {
-	key := auth.chooseKey()
+	kid := auth.chooseRandomKid()
+	return auth.GenerateTokenWithKid(kid, customClaims)
+}
 
+func (auth *Auth[CustomClaims]) chooseRandomKid() string {
+	return auth.signingKids[rand.Intn(len(auth.signingKids))]
+}
+
+func (auth *Auth[CustomClaims]) GenerateTokenWithKid(
+	kid string,
+	customClaims *CustomClaims,
+) (token string, expiresAt time.Time, err error) {
+	var (
+		key    *Key
+		exists bool
+	)
+
+	// check key exists
+	if key, exists = auth.keyStore[kid]; !exists {
+		return "", time.Time{}, ErrInvalidKid
+	}
+
+	// calculate expiration
 	expiresAt = auth.clock.Now().
-		Add(time.Second * time.Duration(auth.expireSeconds))
+		Add(time.Second * time.Duration(auth.expirationDurationSeconds))
 
 	// set claims
 	claims := jwtClaims[CustomClaims]{
@@ -84,10 +105,6 @@ func (auth *Auth[CustomClaims]) GenerateToken(
 	}
 
 	return token, expiresAt, nil
-}
-
-func (auth *Auth[CustomClaims]) chooseKey() *Key {
-	return auth.keyStore[auth.signingKids[rand.Intn(len(auth.signingKids))]]
 }
 
 func (auth *Auth[CustomClaims]) ParseToken(
